@@ -1,8 +1,10 @@
 module org.example.demo {
     requires javafx.controls;
+    requires javafx.base;
     requires javafx.fxml;
+    requires mysql.connector.j;
+    requires java.sql;
 
-
-    opens org.example.demo to javafx.fxml;
-    exports org.example.demo;
+    opens cli to javafx.fxml;
+    exports cli;
 }
