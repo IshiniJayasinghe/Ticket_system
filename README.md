@@ -48,6 +48,6 @@ Customer
 Contact
 For any questions or feedback, please contact:
 - Name: Ishini JAyasinghe
-- GitHub: [Your GitHub Profile URL]
+- GitHub: https://github.com/IshiniJayasinghe
 
 
