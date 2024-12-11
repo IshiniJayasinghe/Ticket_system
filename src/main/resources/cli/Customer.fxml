@@ -1,0 +1,31 @@
+<?xml version="1.0" encoding="UTF-8"?>
+
+<?import javafx.scene.control.Button?>
+<?import javafx.scene.control.ComboBox?>
+<?import javafx.scene.control.Label?>
+<?import javafx.scene.control.TextField?>
+<?import javafx.scene.layout.AnchorPane?>
+<?import javafx.scene.text.Font?>
+
+<AnchorPane prefHeight="400.0" prefWidth="600.0" xmlns="http://javafx.com/javafx/23.0.1" xmlns:fx="http://javafx.com/fxml/1" fx:controller="cli.CustomerController">
+   <children>
+      <ComboBox fx:id="EventDropdown" layoutX="129.0" layoutY="160.0" onAction="#loadEventsIntoDropdown" prefHeight="26.0" prefWidth="338.0" />
+      <Label layoutX="246.0" layoutY="132.0" text="Enter Event Name">
+         <font>
+            <Font name="Times New Roman" size="13.0" />
+         </font></Label>
+      <Label layoutX="240.0" layoutY="208.0" text="Enter Ticket amount">
+         <font>
+            <Font name="Times New Roman" size="13.0" />
+         </font></Label>
+      <TextField fx:id="TicketsToBuy" layoutX="129.0" layoutY="243.0" prefHeight="26.0" prefWidth="338.0" />
+      <Label fx:id="PurchaseStatus" layoutX="169.0" layoutY="47.0" prefHeight="40.0" prefWidth="261.0" text="Choose an event.">
+         <font>
+            <Font name="Times New Roman" size="36.0" />
+         </font></Label>
+      <Button layoutX="333.0" layoutY="322.0" mnemonicParsing="false" onAction="#handlePurchase" text="Buy Ticket" />
+      <Button fx:id="GoBack" layoutX="420.0" layoutY="322.0" mnemonicParsing="false" onAction="#handleExit" text="Go Back" />
+      <Button fx:id="Cancel" layoutX="495.0" layoutY="322.0" mnemonicParsing="false" onAction="#shutdownExecutorService" text="Exit" />
+
+   </children>
+</AnchorPane>
