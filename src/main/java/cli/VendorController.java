@@ -18,10 +18,6 @@ import java.util.concurrent.Executors;
 
 public class VendorController {
 
-    public Button Cancel;
-    public Label Submit;
-    public TextField CustomerRetrievalRate;
-    public TextField TicketReleaseRate;
     OpenSQL db = new OpenSQL();
 
     @FXML
@@ -34,20 +30,18 @@ public class VendorController {
     private TextField EventName;
 
     @FXML
-    private Button OK;
-
-    @FXML
     private Button GoBack;
 
     @FXML
-    private void shutdownExecutorService() {
-        System.exit(0);
-    }
+    private Label Submit;
 
+    @FXML
+    private Button OK;
 
     Vendor vendor = new Vendor();
 
     private final ExecutorService executorService = Executors.newFixedThreadPool(5); // Thread pool with 5 threads
+    private final EventManager eventManager = EventManager.getInstance();
     int maxTicketCapacityPerSession;
 
     @FXML
@@ -61,6 +55,7 @@ public class VendorController {
             System.out.println("VendorController setting rate " + maxTicketCapacityPerSession +
                     " on Vendor #" + vendor.getInstanceId());
 
+            EventManager.getInstance().createEvent(eventName, maxCapacity, maxTicketCapacityPerSession);
             // Set the rate immediately
             vendor.setTicketReleaseRate(maxTicketCapacityPerSession);
 
@@ -71,6 +66,10 @@ public class VendorController {
             // Now submit the database operation
             executorService.submit(() -> insertEventDetails(eventName, maxCapacity, maxTicketCapacityPerSession));
 
+            Event event = eventManager.getEvent(eventName);
+            if (event!=null){
+                System.out.println("Event created and stored: "+event.getStatus());
+            }
         } catch (NumberFormatException e) {
             showAlert("Error", "Please enter valid numbers for capacities.", Alert.AlertType.ERROR);
         }
@@ -78,6 +77,7 @@ public class VendorController {
 
     private void insertEventDetails(String eventName, int maxCapacity, int maxTicketCapacityPerSession) {
         String insertQuery = "INSERT INTO event (`Event Name`, `Max Ticket Capacity`, `Per Session Capacity`) VALUES (?, ?, ?)";
+
         try (Connection con = db.initializeConnection(); PreparedStatement pd = con.prepareStatement(insertQuery)) {
             pd.setString(1, eventName);
             pd.setInt(2, maxCapacity);
@@ -113,6 +113,10 @@ public class VendorController {
     public void setVendor(Vendor sharedVendor) {
         System.out.println("VendorController received Vendor #" + sharedVendor.getInstanceId());
         this.vendor = sharedVendor;
+    }
+
+    public void shutdownExecutorService() {
+        executorService.shutdown();
     }
 
     @FXML

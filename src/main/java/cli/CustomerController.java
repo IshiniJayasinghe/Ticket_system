@@ -12,45 +12,56 @@ import java.sql.Connection;
 import java.sql.PreparedStatement;
 import java.sql.ResultSet;
 import java.sql.SQLException;
+import java.util.ArrayList;
+import java.util.List;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 
 public class CustomerController {
-    public Button GoBack;
-    public Label PurchaseStatus;
     @FXML
     private ComboBox<String> EventDropdown;
 
     @FXML
     private TextField TicketsToBuy;
 
+
     @FXML
     private Button BuyButton;
 
+    private Event event;
     @FXML
     private Button Cancel;
+
+    @FXML
+    private Button GoBack;
+    private final EventManager eventManager = EventManager.getInstance();
 
     Vendor vendor = new Vendor();
     OpenSQL db = new OpenSQL();
     private final ExecutorService executorService = Executors.newFixedThreadPool(5); // Thread pool with 5 threads
-
     @FXML
     public void initialize() {
         // Populate the dropdown menu with events from the database
         loadEventsIntoDropdown();
     }
-
     @FXML
     private void loadEventsIntoDropdown() {
-
-        String query = "SELECT `Event Name` FROM event";
-
+        String query = "SELECT 'Event Name' FROM event";
         try (Connection con = db.initializeConnection();
              PreparedStatement stmt = con.prepareStatement(query);
              ResultSet rs = stmt.executeQuery()) {
 
+            // Temporarily store event names to process later
+            List<String> eventNames = new ArrayList<>();
             while (rs.next()) {
-                String eventName = rs.getString("Event Name");
+                eventNames.add(rs.getString("Event Name"));
+            }
+
+            // Process each event after the ResultSet is closed
+            for (String eventName : eventNames) {
+                if (eventManager.getEvent(eventName) == null) {
+                    loadEventFromDatabase(eventName);
+                }
                 EventDropdown.getItems().add(eventName);
             }
         } catch (SQLException e) {
@@ -58,29 +69,60 @@ public class CustomerController {
             showAlert("Error", "Failed to load events from the database: " + e.getMessage(), Alert.AlertType.ERROR);
         }
     }
+    private void loadEventFromDatabase(String eventName) {
+        String query = "SELECT 'Max Ticket Capacity', 'Per Session Capacity' FROM event WHERE 'Event Name' = ?";
 
+        try (Connection con = db.initializeConnection();
+             PreparedStatement stmt = con.prepareStatement(query)) {
+
+            stmt.setString(1, eventName);
+            ResultSet rs = stmt.executeQuery();
+
+            if (rs.next()) {
+                int availableTickets = rs.getInt("Max Ticket Capacity");
+                int ticketsPerSession = rs.getInt("Per Session Capacity");
+                eventManager.createEvent(eventName, availableTickets, ticketsPerSession);
+                System.out.println("Loaded event from database: " + eventName);
+            }
+        } catch (SQLException e) {
+            e.printStackTrace();
+        }
+    }
     @FXML
     public void handlePurchase() {
         String eventName = EventDropdown.getValue();
-        int ticketsToBuy;
-
         try {
-            ticketsToBuy = Integer.parseInt(TicketsToBuy.getText());
-        } catch (NumberFormatException e) {
-            showAlert("Error", "Please enter a valid number of tickets to buy.", Alert.AlertType.ERROR);
-            return;
-        }
+            int ticketsToBuy = Integer.parseInt(TicketsToBuy.getText());
+            event = eventManager.getEvent(eventName);
 
-        // Submit the ticket purchase task to the thread pool
-        executorService.submit(() -> purchaseTickets(eventName, ticketsToBuy));
+            if (event == null) {
+                System.out.println("Event not found in manager: " + eventName);
+                // Try to load it from database
+                loadEventFromDatabase(eventName);
+                event = eventManager.getEvent(eventName);
+            }
+
+            if (event != null) {
+                String customerId = "Customer-" + System.currentTimeMillis();
+                System.out.println("Processing purchase for event: " + event.getStatus());
+                eventManager.processPurchase(customerId, eventName, ticketsToBuy);
+                purchaseTickets(eventName, ticketsToBuy);
+            } else {
+                showAlert("Error", "Event not found: " + eventName, Alert.AlertType.ERROR);
+            }
+
+        } catch (NumberFormatException e) {
+            showAlert("Error", "Please enter a valid number of tickets.", Alert.AlertType.ERROR);
+        }
     }
 
     private void purchaseTickets(String eventName, int ticketsToBuy) {
         System.out.println("CustomerController using Vendor #" + vendor.getInstanceId() +
                 " with rate: " + vendor.getTicketReleaseRate());
-        int missingTickets;
-        String selectQuery = "SELECT `Max Ticket Capacity`, `Per Session Capacity` FROM event WHERE `Event Name` = ?";
-        String updateTicketsQuery = "UPDATE event SET `Max Ticket Capacity` = ?, `Per Session Capacity` = ? WHERE `Event Name` = ?";
+
+
+        String selectQuery = "SELECT 'Max Ticket Capacity', 'Per Session Capacity' FROM event WHERE 'Event Name' = ?";
+        String updateTicketsQuery = "UPDATE event SET 'Max Ticket Capacity' = ?, 'Per Session Capacity' = ? WHERE 'Event Name' = ?";
 
         try (Connection con = db.initializeConnection();
              PreparedStatement selectStmt = con.prepareStatement(selectQuery);
@@ -91,38 +133,17 @@ public class CustomerController {
             ResultSet rs = selectStmt.executeQuery();
 
             if (rs.next()) {
-                int availableTickets = rs.getInt("Max Ticket Capacity");
-                int ticketsPerSession = rs.getInt("Per Session Capacity");
-                missingTickets = ticketsToBuy - ticketsPerSession;
-                // Check if enough tickets are available in the session
-                if (ticketsToBuy <= availableTickets) {
-                    if (missingTickets < 0) {
-                        availableTickets = availableTickets - missingTickets;
-                        ticketsPerSession = ticketsPerSession + missingTickets;
-                    }
-                    ticketsPerSession -= ticketsToBuy;  // Deduct tickets from the current session
-                    availableTickets -= ticketsToBuy;   // Deduct tickets from the available total
+                int availableTickets = event.getAvailableTickets();
+                System.out.println("Available tick: "+availableTickets);
+                int ticketsPerSession = event.getTicketsPerSession();
+                System.out.println("Available per sesh: "+ticketsPerSession);
 
-                    System.out.println("Vendor released " + vendor.getTicketReleaseRate());
-                    // Refill session if depleted
-                    if (ticketsPerSession <= 0 && availableTickets > 0) {
-                        ticketsPerSession = Math.min(availableTickets, vendor.getTicketReleaseRate());
-                    }
+                // Update the database
+                updateStmt.setInt(1, availableTickets);
+                updateStmt.setInt(2, ticketsPerSession);
+                updateStmt.setString(3, eventName);
+                updateStmt.executeUpdate();
 
-                    // Update the database
-                    updateStmt.setInt(1, availableTickets);
-                    updateStmt.setInt(2, ticketsPerSession);
-                    updateStmt.setString(3, eventName);
-
-                    int rowsAffected = updateStmt.executeUpdate();
-                    if (rowsAffected > 0) {
-                        updateUI("Tickets purchased successfully.", Alert.AlertType.INFORMATION);
-                    } else {
-                        updateUI("Failed to update tickets.", Alert.AlertType.ERROR);
-                    }
-                } else {
-                    updateUI("Not enough tickets available in the current session.", Alert.AlertType.WARNING);
-                }
             } else {
                 updateUI("Event not found.", Alert.AlertType.WARNING);
             }
@@ -152,9 +173,8 @@ public class CustomerController {
         this.vendor = sharedVendor;
     }
 
-    @FXML
-    private void shutdownExecutorService() {
-        System.exit(0);
+    public void shutdownExecutorService() {
+        executorService.shutdown();
     }
 
     @FXML
@@ -165,7 +185,7 @@ public class CustomerController {
             Parent vendorCustomerRoot = loader.load();
 
             // Get the current stage
-            Stage currentStage = (Stage) Cancel.getScene().getWindow();
+            Stage currentStage = (Stage) GoBack.getScene().getWindow();
 
             // Set the VendorCustomer scene
             Scene vendorCustomerScene = new Scene(vendorCustomerRoot);
